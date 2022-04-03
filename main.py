@@ -1,3 +1,5 @@
+import socket
+import ssl
 import mysql.connector
 import argparse
 
@@ -6,6 +8,35 @@ mydb = mysql.connector.connect(
     user="root",
     password="new_password"
 )
+
+
+class Server:
+    def __init__(self):
+        self.context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        self.context.load_cert_chain(certfile="cert_example.pem")
+        self.sock = socket.socket()
+        self.sock.bind(('localhost', 2096))
+
+    def listen(self):
+        self.sock.listen(5)
+        self.context.set_ciphers('AES256+ECDH:AES256+EDH')
+        while True:
+            self.conn = None
+            self.ssock, self.addr = self.sock.accept()
+            try:
+                self.conn = self.context.wrap_socket(self.ssock, server_side=True)
+                self.conn.write(b'I am server! Answered by ssl.\n')
+                print(self.conn.recv().decode())
+            except ssl.SSLError as e:
+                print(e)
+            finally:
+                if self.conn:
+                    self.conn.close()
+                    self.newsocket, self.fromaddr = self.sock.accept()
+                    self.conn = self.context.wrap_socket(self.ssock, server_side=True)
+                    self.request = self.conn.read()
+                    self.ssock, self.addr = self.sock.accept()
+                    print(self.request)
 
 
 class Database:
@@ -89,6 +120,7 @@ class StructureDatbase:
 
 class App:
     def __init__(self, args):
+        self.server = None
         self.last_new_user = None
         print(args)
         self.db_name = args["database_name"]
@@ -118,6 +150,8 @@ class App:
             self.createtable()
         if self.add_user:
             self.user_db.adduser(self.new_user)
+        self.server = Server()
+        self.server.listen()
 
 
 parser = argparse.ArgumentParser(description='Art-classifier server.')
